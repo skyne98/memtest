@@ -1,4 +1,3 @@
-use packed_simd::u8x32;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
 use std::fmt::{self, Display, Formatter};
@@ -39,22 +38,6 @@ impl Display for HumanBytesPerSec {
     }
 }
 
-fn simd_copy(src: &[u8], dst: &mut [u8]) {
-    assert_eq!(src.len(), dst.len());
-    assert!(
-        src.len() % u8x32::lanes() == 0,
-        "Length must be a multiple of {}",
-        u8x32::lanes()
-    );
-
-    src.chunks_exact(u8x32::lanes())
-        .zip(dst.chunks_exact_mut(u8x32::lanes()))
-        .for_each(|(src_chunk, dst_chunk)| {
-            let src_vector = u8x32::from_slice_unaligned(src_chunk);
-            src_vector.write_to_slice_unaligned(dst_chunk);
-        });
-}
-
 fn test_memory_speed(size: usize, runs: usize, num_cores: usize) -> f64 {
     let pool = ThreadPoolBuilder::new()
         .num_threads(num_cores)
@@ -72,7 +55,7 @@ fn test_memory_speed(size: usize, runs: usize, num_cores: usize) -> f64 {
                 .enumerate()
                 .for_each(|(i, chunk)| {
                     let offset = i * 1024 * 1024;
-                    simd_copy(&src[offset..offset + chunk.len()], chunk);
+                    chunk.copy_from_slice(&src[offset..offset + chunk.len()]);
                 });
         });
         let duration = start.elapsed();
